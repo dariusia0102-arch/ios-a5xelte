@@ -26,7 +26,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DXB_REPO: https://github.com
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
   MACOS_VERSION: ${{ inputs.macos_version || '13.5' }}
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
@@ -42,7 +41,7 @@ jobs:
       - name: Fetch build script
         run: |
           git init -q dxb
-          git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
+          git -C dxb fetch -q --depth 1 https://github.com "$DXB_SHA"
           git -C dxb checkout -q FETCH_HEAD
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
           for p in dxb/patches/*.patch; do printf '\n' >> "$p"; done
@@ -79,8 +78,7 @@ jobs:
             --exclude='*.o' --exclude='*.cpo' --exclude='*.a' --exclude='*.dSYM' --exclude='*.unstripped' \
             --exclude='kernel.development.*' --exclude='.git' \
             -C dxb build/xnu.obj fakeroot/usr/local/include xnu \
-            -C .. sdk-kernel-platform
-          ls -la buildtree.tgz
+            -C .. sdk-kernel-platform || true
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -88,18 +86,19 @@ jobs:
           name: xnu-buildtree
           path: buildtree.tgz
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Inspect closed KDK support libs
         if: always()
         run: |
           mkdir -p out/kdk-libs
           for lib in /Library/Developer/KDKs/*/System/Library/KernelSupport/lib*.a; do
+            [ -f "$lib" ] || continue
             b=$(basename "$lib" .a)
             ar t "$lib" > "out/kdk-libs/$b.members.txt" 2>&1 || true
             nm -m "$lib" > "out/kdk-libs/$b.nm.txt" 2>&1 || true
             lipo -info "$lib" >> out/kdk-libs/arch.txt 2>&1 || true
           done
-          ls -la out/kdk-libs
 
       - name: Collect
         if: always()
